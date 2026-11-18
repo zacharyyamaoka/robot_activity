@@ -451,11 +451,20 @@ def _reason_rows(table: list[ReasonHours], *, problem_class: str = "warn") -> st
     return "".join(rows)
 
 
-def _table(title: str, head: str, body: str, empty: str, *, narrow: bool = False) -> str:
+def _table(title: str, head: str, body: str, empty: str, *, narrow: bool = False, stack: bool = False) -> str:
+    """A titled table panel. `stack`: on a phone each row becomes a card of labelled lines (cells carry data-label)."""
     if not body:
         return f"<div class=\"panel\"><h4>{_e(title)}</h4><p class=\"calm\">{_e(empty)}</p></div>"
-    return (f"<div class=\"panel{' narrow' if narrow else ''}\"><h4>{_e(title)}</h4><div class=\"scroll\"><table>"
-            f"<thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div></div>")
+    panel_class = "panel narrow" if narrow else "panel"
+    table_class = ' class="stack"' if stack else ""
+    return (f"<div class=\"{panel_class}\"><h4>{_e(title)}</h4><div class=\"scroll\">"
+            f"<table{table_class}><thead><tr>{head}</tr></thead><tbody>{body}</tbody></table></div></div>")
+
+
+def _row(cells: list[tuple[str, str, str]]) -> str:
+    """One table row from (label, html, css class) cells; the label shows beside the value when rows stack."""
+    return "<tr>" + "".join(f"<td class=\"{cls}\" data-label=\"{_e(label)}\">{content}</td>"
+                            for label, content, cls in cells) + "</tr>"
 
 
 def _robots(page: Page) -> str:
@@ -561,32 +570,36 @@ def _queue_section(page: Page) -> str:
     def policy(item: Item) -> str:
         return _policy_html(item.policy) if item.policy else "<span class=\"muted\">none shared</span>"
 
-    running_rows = "".join(
-        f"<tr><td>{_e(item.ran_on)}</td><td>{_e(item.title)}<div class=\"id\">{_e(item.id)}</div></td>"
-        f"<td>{_e(item.owner)}</td><td class=\"num\">{_duration(page.now - (item.started_t or page.now))} / "
-        f"{item.est_min:g} min</td><td class=\"policy-cell\">{policy(item)}</td></tr>" for item in running)
-    ready_rows = "".join(
-        f"<tr><td class=\"num\">{position}</td><td>{_e(item.title)}<div class=\"id\">{_e(item.id)}</div></td>"
-        f"<td>{_e(item.robot)}</td><td>{_e(item.source)} · p{item.priority}</td><td>{_e(item.owner)}"
-        f"{'' if item.executor == item.owner else f' → {_e(item.executor)}'}</td>"
-        f"<td class=\"num\">{item.est_min:g} min</td><td class=\"policy-cell\">{policy(item)}</td></tr>"
+    def title(item: Item) -> str:
+        return f"{_e(item.title)}<div class=\"id\">{_e(item.id)}</div>"
+
+    def owner(item: Item) -> str:
+        return _e(item.owner) + ("" if item.executor == item.owner else f" → {_e(item.executor)}")
+
+    running_rows = "".join(_row([
+        ("robot", _e(item.ran_on), "nowrap"), ("item", title(item), "lead"), ("owner", owner(item), ""),
+        ("elapsed / est", f"{_duration(page.now - (item.started_t or page.now))} / {item.est_min:g} min", "num"),
+        ("policy", policy(item), "policy-cell")]) for item in running)
+    ready_rows = "".join(_row([
+        ("#", str(position), "num"), ("item", title(item), "lead"), ("robot", _e(item.robot), "nowrap"),
+        ("source", f"{_e(item.source)} · p{item.priority}", ""), ("owner → executor", owner(item), ""),
+        ("est", f"{item.est_min:g} min", "num"), ("policy", policy(item), "policy-cell")])
         for position, item in enumerate(ready, start=1))
-    waiting_rows = "".join(
-        f"<tr><td>{_e(item.title)}<div class=\"id\">{_e(item.id)}</div></td><td>{_e(item.robot)}</td>"
-        f"<td class=\"why\">{_why_cell(reasons_not_ready(item, items))}</td>"
-        f"<td>{_e(item.owner)}</td><td>{_e(_eta(page, item))}</td><td class=\"policy-cell\">{policy(item)}</td></tr>"
-        for item in waiting)
+    waiting_rows = "".join(_row([
+        ("item", title(item), "lead"), ("robot", _e(item.robot), "nowrap"),
+        ("why", f"<div class=\"reasons\">{_why_cell(reasons_not_ready(item, items))}</div>", "why"), ("owner", owner(item), ""),
+        ("ETA", _e(_eta(page, item)), ""), ("policy", policy(item), "policy-cell")]) for item in waiting)
     return (
         "<section class=\"card\" aria-label=\"The active queue\"><h2>The active queue</h2>"
         "<p class=\"hint\">Items belong to their owners. One runs per robot; the rest start in priority order (system "
         "0, agent 5, filler 9), and only once the owner has shared the policy it will run.</p>"
-        + _table("Running now", "<th>robot</th><th>item</th><th>owner</th><th class=\"num\">elapsed / est</th>"
-                 "<th>policy</th>", running_rows, "Nothing is running.")
+        + _table("Running now", "<th>robot</th><th>item</th><th>owner → executor</th>"
+                 "<th class=\"num\">elapsed / est</th><th>policy</th>", running_rows, "Nothing is running.", stack=True)
         + _table("Runnable, in start order", "<th class=\"num\">#</th><th>item</th><th>robot</th><th>source</th>"
                  "<th>owner → executor</th><th class=\"num\">est</th><th>policy</th>", ready_rows,
-                 "Nothing is runnable: the queue is dry.")
-        + _table("Not ready", "<th>item</th><th>robot</th><th>why</th><th>owner</th><th>ETA</th><th>policy</th>",
-                 waiting_rows, "Every queued item is ready.")
+                 "Nothing is runnable: the queue is dry.", stack=True)
+        + _table("Not ready", "<th>item</th><th>robot</th><th>why</th><th>owner → executor</th><th>ETA</th>"
+                 "<th>policy</th>", waiting_rows, "Every queued item is ready.", stack=True)
         + "</section>")
 
 
@@ -816,7 +829,14 @@ footer{margin-top:24px;font-size:13px;color:var(--ink-2);display:grid;gap:6px;ma
 @media (max-width:640px){main{padding:16px 16px 40px}.hero{grid-template-columns:1fr}.figure{font-size:56px}
 .hero-side{gap:24px}.lane{grid-template-columns:1fr;gap:0}.lane-name{font-size:12px}.axis{margin-left:0}
 .panels{grid-template-columns:1fr}.robot-body{padding-left:0}.top{align-items:flex-start}
-.policy-cell{max-width:200px}}
+.policy-cell{max-width:none}
+table.stack thead{display:none}
+table.stack tr{display:flex;flex-direction:column;padding:10px 0;border-bottom:1px solid var(--grid)}
+table.stack tr:last-child{border-bottom:0}
+table.stack td{display:flex;gap:10px;border:0;padding:2px 0;text-align:left;white-space:normal}
+table.stack td::before{content:attr(data-label);flex:0 0 112px;color:var(--muted)}
+table.stack td.lead{font-weight:600;display:block;order:-1}table.stack td.lead::before{content:none}
+table.stack td.lead .id{font-weight:400}}
 @media print{.ghost{display:none}details.robot{break-inside:avoid}}
 """
 
