@@ -5,6 +5,8 @@
 
 **Keep every robot doing useful work, and say why when it isn't.**
 
+**Landing page, with the dashboard replaying a demo fleet's day:** [zacharyyamaoka.github.io/robot_activity](https://zacharyyamaoka.github.io/robot_activity/) · [the demo dashboard](https://zacharyyamaoka.github.io/robot_activity/dashboard.html) · [changelog](CHANGELOG.md)
+
 A robot that could be working and isn't is wasted capital, the way an idle press is in a plastics plant. This package
 is a drop-in member of a robotics team with exactly that remit. It measures activity per robot and per fleet, keeps a
 work queue full and moving, flags stalemates, and runs an agent loop that prompts the right people. It never decides
@@ -179,6 +181,16 @@ The contract for every module, field and default is [`docs/SPEC.md`](docs/SPEC.m
 
 ```bash
 uv run --extra test pytest -q -rs
+```
+
+The landing page is built from real runs of the package (`website/build_site.py`: the demo fleet, the dashboard replay, the queue screen, the W&B payload, the real-day parity table) and published to the `gh-pages` branch:
+
+```bash
+uv run --extra site --with playwright python website/build_site.py
+```
+
+```bash
+python3 website/publish_pages.py
 ```
 
 The acceptance tests were written from the spec before the code. Tests marked `archive` read one lab's real rows and
