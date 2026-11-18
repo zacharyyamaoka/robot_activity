@@ -82,13 +82,15 @@ def parse_time(text: str | None, now: float | None = None) -> float | None:
 def cmd_demo(args: argparse.Namespace) -> int:
     from robot_activity.demo import simulate_fleet
 
-    result = simulate_fleet(_root(args), day=args.day or "2026-11-18", seed=args.seed, tz=args.tz)
+    # WHY today by default: then summary, queue, agent tick and dashboard (all "today" by default) chain without --day
+    result = simulate_fleet(_root(args), day=_day(args, _store(args)), seed=args.seed, tz=args.tz)
     if args.json:
         _print_json(result)
     else:
         print(f"simulated {result['day']} for {', '.join(result['robots'])}: {result['rows']} rows, "
               f"{result['items']} items, {result['actions']} agent actions -> {result['root']}")
-        print(f"next: robot-activity summary --root {result['root']} --day {result['day']}")
+        print(f"next: robot-activity summary --root {result['root']} --day {result['day']}"
+              + (f" --tz {args.tz}" if args.tz else ""))
     return 0
 
 
@@ -292,8 +294,11 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
 
 
 def cmd_wandb(args: argparse.Namespace) -> int:
-    from robot_activity.wandb_log import push
+    from robot_activity.wandb_log import push, report
 
+    if args.wandb_command == "report":
+        print(report(args.project, entity=args.entity, title=args.title, day=args.day))
+        return 0
     store = _store(args)
     result = push(store, Queue(store.root), _day(args, store), args.project, entity=args.entity)
     _print_json(result)
@@ -336,7 +341,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     demo = commands.add_parser("demo", help="write a simulated fleet day (samples, queue, agent actions)")
     _common(demo)
-    demo.add_argument("--day")
+    demo.add_argument("--day", help="the simulated day (default: today)")
     demo.add_argument("--seed", type=int, default=0)
     demo.add_argument("--json", action="store_true")
     demo.set_defaults(handler=cmd_demo)
@@ -367,12 +372,14 @@ def build_parser() -> argparse.ArgumentParser:
     dashboard.add_argument("--until", help="cut every row and event after this time (replay frames)")
     dashboard.set_defaults(handler=cmd_dashboard)
 
-    wandb = commands.add_parser("wandb", help="push a day to Weights & Biases (extra: robot-activity[wandb])")
-    wandb.add_argument("wandb_command", choices=("push",))
+    wandb = commands.add_parser("wandb", help="push a day to Weights & Biases (extra: robot-activity[wandb]), or "
+                                              "save its Report (also needs wandb-workspaces)")
+    wandb.add_argument("wandb_command", choices=("push", "report"))
     _common(wandb)
     wandb.add_argument("--project", required=True)
     wandb.add_argument("--entity")
-    wandb.add_argument("--day")
+    wandb.add_argument("--day", help="push: the day (default today); report: only that day's runs (default all)")
+    wandb.add_argument("--title", default="Robot Activity Agent", help="report: its title (updated in place)")
     wandb.set_defaults(handler=cmd_wandb)
 
     sample = commands.add_parser("sample", help="write one Sample per window from your probe function")

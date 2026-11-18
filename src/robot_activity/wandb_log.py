@@ -108,7 +108,9 @@ def push(store: Store, queue: Queue, day: str, project: str, entity: str | None 
         runs.append(_push_run(wandb, api, entity, project, fleet_run, day_start, local_dir, live,
                               job_type="fleet-day", config={"robots": len(fleet_run["tables"]["robots"]), "day": day,
                                                             "tz": store.tz}))
-    return {"entity": entity, "project": project, "url": f"https://wandb.ai/{entity}/{project}", "runs": runs}
+    # WHY from a run's url: the W&B host is per account (wandb.ai, a dedicated or self-hosted server)
+    url = runs[0]["url"].rsplit("/runs/", 1)[0] if runs and runs[0]["url"] else None
+    return {"entity": entity, "project": project, "url": url, "runs": runs}
 
 
 def _is_live(rows: list[Sample]) -> bool:
@@ -161,3 +163,88 @@ def _cell(value: Any) -> Any:
         return ", ".join(f"{key}: {amount / 60:.1f} min" if isinstance(amount, float) else f"{key}: {amount}"
                          for key, amount in sorted(value.items(), key=lambda entry: -float(entry[1] or 0)))
     return value
+
+
+# --- report (needs wandb-workspaces) --------------------------------------------------------------------------------
+
+def report(project: str, entity: str | None = None, *, title: str = "Robot Activity Agent", day: str | None = None,
+           repo_url: str = "https://github.com/zacharyyamaoka/robot_activity") -> str:
+    """Create, or update in place (found by title), the project's W&B Report of the headline panels; returns its URL.
+
+    Panels: utilisation and moving share per robot over the day, each run's day totals, why it stood still and who
+    held the robot. Needs `pip install wandb-workspaces` beside the [wandb] extra.
+    """
+    import wandb
+    import wandb_workspaces.reports.v2 as wr
+    from wandb_workspaces import expr
+
+    api = wandb.Api()
+    entity = entity or api.default_entity
+    day_filter = [expr.Config("day") == day] if day else []
+
+    def runset(name: str, job_type: str) -> Any:
+        return wr.Runset(entity=entity, project=project, name=name,
+                         filters=[expr.Metric("JobType") == job_type, *day_filter])
+
+    def smoothed(panel_title: str, metric: str, x: int, y: int) -> Any:
+        return wr.LinePlot(title=panel_title, x="hour", y=[metric], range_x=(0, 24), range_y=(0, 1),
+                           title_x="hour of the day", smoothing_factor=15, smoothing_type="gaussian",
+                           smoothing_show_original=False, layout=wr.Layout(x=x, y=y, w=12, h=8))
+
+    blocks = [
+        wr.MarkdownBlock(text=(
+            "**Keep every robot doing useful work, and say why when it isn't.** Every tracked second of every robot "
+            "falls on one side of three splits: claimed / unclaimed, activity / dead (an item dispatched on a "
+            "healthy, claimed robot; still inside a job counts), moving / still / unknown (no joint feed is never "
+            "idle). One run per robot per day, one step per minute; the fleet run rolls them up.\n\n"
+            f"*{CAVEAT}*\n\nMade with [robot_activity]({repo_url}): `robot-activity wandb push`.")),
+        wr.H2(text="Utilisation and moving share over the day"),
+        wr.PanelGrid(runsets=[runset("robots", "robot-day"), runset("fleet", "fleet-day")], panels=[
+            smoothed("Activity share (utilisation), per robot and fleet", "activity_frac", 0, 0),
+            smoothed("Moving share, per robot and fleet", "moving_frac", 12, 0),
+            wr.BarPlot(title="Utilisation today (activity ÷ tracked)", metrics=["utilization"], orientation="h",
+                       range_x=(0, 1), layout=wr.Layout(x=0, y=8, w=12, h=7)),
+            wr.BarPlot(title="Moving share today", metrics=["moving_share"], orientation="h", range_x=(0, 1),
+                       layout=wr.Layout(x=12, y=8, w=12, h=7)),
+        ]),
+        wr.H2(text="Why it stood still, and who held the robot"),
+        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[
+            wr.WeavePanelSummaryTable(table_name="table/why_still", layout=wr.Layout(x=0, y=0, w=12, h=10)),
+            wr.WeavePanelSummaryTable(table_name="table/owners", layout=wr.Layout(x=12, y=0, w=12, h=10)),
+        ]),
+        wr.H2(text="Streaks and hand-off gaps"),
+        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[
+            wr.WeavePanelSummaryTable(table_name="table/streaks", layout=wr.Layout(x=0, y=0, w=12, h=10)),
+            wr.WeavePanelSummaryTable(table_name="table/handoff_gaps", layout=wr.Layout(x=12, y=0, w=12, h=10)),
+        ]),
+    ]
+    description = "Fleet utilisation, moving share, why robots stood still and who held them, from robot_activity."
+    existing = next((found for found in api.reports(f"{entity}/{project}") if found.display_name == title), None)
+    if existing is not None:
+        built = wr.Report.from_url(_from_entity(existing.url, entity))
+        built.title, built.description, built.blocks = title, description, blocks
+    else:
+        built = wr.Report(entity=entity, project=project, title=title, description=description, blocks=blocks)
+    built.width = "fluid"
+    built.save()
+    # WHY ask the server for the link: some hosts serve the app under a path prefix the saved report's url leaves out
+    saved = next((found for found in api.reports(f"{entity}/{project}") if found.display_name == title), None)
+    return _quoted(saved.url) if saved is not None else built.url
+
+
+def _from_entity(url: str, entity: str) -> str:
+    """`Report.from_url` expects /<entity>/<project>/reports/<name>: drop any app prefix the host puts before it."""
+    from urllib.parse import urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    segments = parts.path.split("/")
+    start = segments.index(entity) if entity in segments else 1
+    return urlunsplit(parts._replace(path="/" + "/".join(segments[start:])))
+
+
+def _quoted(url: str) -> str:
+    """A link that survives being pasted: spaces and the middle dot in project and report names escaped."""
+    from urllib.parse import quote, unquote, urlsplit, urlunsplit
+
+    parts = urlsplit(url)
+    return urlunsplit(parts._replace(path=quote(unquote(parts.path), safe="/=-_.~")))
