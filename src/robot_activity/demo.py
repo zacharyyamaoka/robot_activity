@@ -243,10 +243,12 @@ class _Fleet:
     def at(self, hours: float) -> float:
         return self.day_start + hours * HOUR
 
-    def run(self) -> dict:
+    def run(self, until: float | None = None) -> dict:
+        # WHY until: a demo of today that ran to midnight left items "running" from hours that had not happened yet.
+        end = self.day_end if until is None else min(self.day_end, until)
         tick = 0
         now = self.day_start
-        while now < self.day_end:
+        while now <= end and now < self.day_end:
             self._owners_act(now)
             for robot in self.robots.values():
                 self._step(robot, now)
@@ -392,10 +394,13 @@ def _slug(title: str) -> str:
 
 
 def simulate_fleet(root: str | Path, *, day: str = "2026-11-18", seed: int = 0,
-                   robots: tuple[str, ...] = ("arm-1", "arm-2", "pendulum-1"), tz: str | None = "UTC") -> dict:
-    """Write one simulated fleet day under `root` (samples, queue, agent state) and return what was written."""
+                   robots: tuple[str, ...] = ("arm-1", "arm-2", "pendulum-1"), tz: str | None = "UTC",
+                   until: float | None = None) -> dict:
+    """Write one simulated fleet day under `root` (samples, queue, agent state) and return what was written.
+
+    `until` stops the day there: nothing is written after it, so the queue on disk is the queue as it stood then."""
     fleet = _Fleet(Path(root), day, seed, tuple(robots), tz)
-    counts = fleet.run()
+    counts = fleet.run(until)
     return {"root": str(root), "day": day, "seed": seed, "tz": tz, "robots": list(robots), **counts,
             "actions": _count_lines(Path(root) / "agent" / "actions.jsonl")}
 

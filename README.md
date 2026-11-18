@@ -50,18 +50,19 @@ robot-activity queue --root fleet
 ```
 
 ```bash
-robot-activity agent tick --root fleet --config examples/agent.toml
+robot-activity agent tick --root fleet
 ```
 
 ```bash
 robot-activity dashboard --root fleet --out activity.html
 ```
 
-`demo` simulates today for three robots: two arms and a 1-DOF pendulum, their owners, a work queue and the real agent
+`demo` simulates today, up to now, for three robots: two arms and a 1-DOF pendulum, their owners, a work queue and the real agent
 ticking every minute. The simulated owners react to the agent's prompts. The day includes a looping regrasp, a frozen
 run, a bus fault, items blocked on code, data, a human and hardware, and a joint feed that drops out. `summary` prints
 the day on the three splits (`--json` for one document). `queue` shows the active queue on one screen. `agent tick`
-runs one pass of the agent's loop. `dashboard` writes one self-contained HTML file: light and dark, phone-width safe,
+runs one pass of the agent's loop (declare your program's fillers in an `agent.toml`, as in
+[`examples/agent.toml`](examples/agent.toml), and pass `--config`). `dashboard` writes one self-contained HTML file: light and dark, phone-width safe,
 no network.
 
 ## The queue

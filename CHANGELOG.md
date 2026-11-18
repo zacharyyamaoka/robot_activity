@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1 · 2026-11-18
+
+- **The quickstart works as written.** `robot-activity demo` for today stops at the present
+  (`simulate_fleet(..., until=)`), so `queue` right after it never shows a negative elapsed time; the README's
+  `agent tick` no longer points at `examples/agent.toml`, which a `pip install` does not ship. 224 tests.
+
 ## 0.1.0 · 2026-11-18
 
 The first release of the Robot Activity Agent: keep every robot doing useful work, and say why when it isn't.

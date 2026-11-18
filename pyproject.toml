@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "robot-activity"
-version = "0.1.0"
+version = "0.1.1"
 description = "Robot Activity Agent: keep every robot doing useful work. Activity metrics (claimed/activity/moving), a work queue with owners and shared policies, stalemate flags, and an agent loop that keeps the queue full."
 readme = "README.md"
 authors = [{ name = "Zach Yamaoka" }]

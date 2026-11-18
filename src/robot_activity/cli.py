@@ -82,8 +82,13 @@ def parse_time(text: str | None, now: float | None = None) -> float | None:
 def cmd_demo(args: argparse.Namespace) -> int:
     from robot_activity.demo import simulate_fleet
 
-    # WHY today by default: then summary, queue, agent tick and dashboard (all "today" by default) chain without --day
-    result = simulate_fleet(_root(args), day=_day(args, _store(args)), seed=args.seed, tz=args.tz)
+    # WHY today by default: then summary, queue, agent tick and dashboard (all "today" by default) chain without --day.
+    # WHY until now for today: the simulated day stops at the present, so nothing on disk is in the future.
+    store = _store(args)
+    day = _day(args, store)
+    now = time.time()
+    until = now if day == store.day_of(now) else None
+    result = simulate_fleet(_root(args), day=day, seed=args.seed, tz=args.tz, until=until)
     if args.json:
         _print_json(result)
     else:
