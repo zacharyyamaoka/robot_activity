@@ -412,8 +412,14 @@ def push(store, queue, day, project, entity=None) -> dict   # logs the payloads;
 ### `demo.py`
 
 ```python
-def simulate_fleet(root, *, day="2026-11-18", seed=0, robots=("arm-1", "arm-2", "pendulum-1"), tz="UTC") -> dict
+def simulate_fleet(root, *, day="2026-11-18", seed=0, robots=("arm-1", "arm-2", "pendulum-1"), tz="UTC",
+                   until=None) -> dict
 ```
+
+`until` (unix seconds) stops the simulated day there: no sample, queue event or agent action after it, so the
+queue on disk is the queue as it stood at `until`. `robot-activity demo` for today passes `until=now`, so nothing is
+ever written in the future (a running item never shows a negative elapsed time). Same seed and same `until` →
+byte-identical files.
 
 A deterministic simulated fleet day (same seed → byte-identical files): 10 s samples for every robot over the day,
 queue items and events with owners, policies, blockers of several kinds, one fault episode with an explicit reason,
