@@ -1,0 +1,24 @@
+# Every test except the `archive` ones runs here: those read one lab's real activity rows, which are not public, and
+# skip cleanly without them (tests/test_real_parity.py).
+name: test
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: tests (no real rows)
+        run: uv run --isolated --python ${{ matrix.python }} --extra test python -m pytest -q -rs
+      - name: runtime import needs nothing beyond robot-msgs and the stdlib
+        run: uv run --isolated --no-project --python ${{ matrix.python }} --with . python -c "import robot_activity, robot_activity.cli, sys; assert 'wandb' not in sys.modules"

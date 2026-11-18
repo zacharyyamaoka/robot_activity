@@ -1,0 +1,33 @@
+# The Robot Activity Agent's settings: robot-activity agent tick --root DIR --config examples/agent.toml
+# Every key is optional; these are the defaults except for the fillers.
+
+idle_after_s = 180.0      # prompt once a robot has been dead this long
+min_runnable = 1          # below this many runnable items, the queue is "low"
+remind_s = 900.0          # the same prompt at most once per 15 min
+dispatcher = "dispatcher" # who hears about fillers and stalemates
+still_limit_s = 300.0     # still this long inside a running item = stuck
+
+# Fillers are the program's OWN declared fallback work. The agent only enqueues them (source "filler", priority 9,
+# after every system and agent item); it never invents work. Each runs shared code, so each names its policy.
+
+[[filler]]
+title = "self-test"
+owner = "rig-owner"
+est_min = 4.0
+robot = "arm-1"
+[filler.policy]
+repo = "https://github.com/example/rig-tools"
+commit = "0123456789abcdef0123456789abcdef01234567"
+path = "checks/self_test.py"
+entrypoint = "main"
+
+[[filler]]
+title = "swing test"
+owner = "rack-agent"
+est_min = 8.0
+robot = "pendulum-1"
+[filler.policy]
+repo = "https://github.com/example/pendulum-rack"
+commit = "89abcdef0123456789abcdef0123456789abcdef"
+path = "tests/swing_test.py"
+entrypoint = "main"
