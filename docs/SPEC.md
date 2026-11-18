@@ -186,10 +186,42 @@ class Queue:
     def finish(self, item_id, *, result="ok", note=None, now=None) -> Item   # result ok -> status done, else failed
     def cancel(self, item_id, *, note=None, now=None) -> Item
     def snapshot(self, robot) -> QueueSnapshot
-    def events(self) -> list[dict]            # the ledger, oldest first
+    def events(self) -> list[dict]            # the ledger, oldest first (shape frozen below)
 ```
 
 A second `Queue` on the same root sees every change (state lives in the files, not the object).
+
+Every mutating method also takes an optional keyword `by: str | None = None` (who did it); `submit` defaults it to
+the owner and `start` requires it. Other programs that never import this package (e.g. the sister `robot_autonomy`)
+write to the queue through the CLI only, never by editing queue files.
+
+#### The events ledger — a frozen, cross-repo seam
+
+`events.jsonl` is read by other repos, so its shape is frozen: one JSON object per line, oldest first. Every event has
+
+| field | type | meaning |
+|---|---|---|
+| `schema` | `"robot-activity-event/1"` | |
+| `t` | float | unix seconds |
+| `kind` | str | `submit` · `policy` · `block` · `unblock` · `eta` · `start` · `finish` · `cancel` |
+| `id` | str | the item id |
+| `robot` | str | the item's robot (`"any"` until it starts); for `start`, `finish`, `cancel` of a started item: the robot it ran on |
+| `by` | str or null | who did it |
+
+and, per kind, exactly these extra fields:
+
+| kind | extra fields |
+|---|---|
+| `submit` | `item`: the full Item as a dict (as in its JSON file) |
+| `policy` | `policy`: the PolicyRef as a dict |
+| `block` | `blocker`: `{"kind", "why", "eta_t"}` (the Blocker added) |
+| `unblock` | `blocker_kind`: the kind cleared, or null when all were cleared; `cleared`: list of the Blocker dicts removed |
+| `eta` | `eta_t`: float or null |
+| `start` | none (the robot is in `robot`) |
+| `finish` | `result`: `"ok"` / anything else (failed); `note`: str or null |
+| `cancel` | `note`: str or null |
+
+Sample rows and item files may omit keys whose value is null; readers treat a missing key as null.
 
 ### `metrics.py`
 
