@@ -33,4 +33,4 @@ cd ~/robot_activity && taskset -c 2-5,16,17 uv run --extra test pytest -q
 - At most 2 worker processes, pinned `taskset -c 2-5,16,17`; never CPUs 22-23. Never touch /dev/ttyACM*, CAN, cameras.
 - Public: github.com/zacharyyamaoka/robot_activity (MIT). Never commit data, recordings, private paths or secrets.
 - Landing page: `website/build_site.py` then `website/publish_pages.py` (gh-pages).
-- Reports: `reports/<name>-<date>.html`.
+- Reports: `reports/<name>-<date>.html` at the top of the main checkout (media in the gitignored `reports/media/`).

@@ -70,6 +70,7 @@ class Action:
     item: str | None = None
     policy: str | None = None    # PolicyRef.describe() of the item, when it has one
     key: str = ""                # de-dup key
+    asked: tuple[str, ...] = ()  # ask_eta / queue_low: the item ids whose owners are asked
 
 
 def action_record(action: Action, **extra: Any) -> dict[str, Any]:
@@ -122,15 +123,19 @@ class ActivityAgent:
         emitted = []
         for robot in self.store.robots():
             rows = self.store.since(robot, now - self._lookback_s(), now)
-            proposed = [*self._dead_streak(robot, rows, now), *self._queue_low(robot, now),
-                        *self._stalemates(robot, rows, now)]
-            for action in proposed:
-                last_t = sent.get(action.key)
-                if last_t is not None and now - last_t < self.config.remind_s:
-                    continue
-                sent[action.key] = now
-                emitted.append(action)
-                self._record(action, now)
+            # Each rule runs after the previous one's actions are recorded in `sent`, so a later rule sees which
+            # items an earlier one already asked about in this same tick.
+            for propose in (lambda: self._dead_streak(robot, rows, now, sent), lambda: self._queue_low(robot, now, sent),
+                            lambda: self._stalemates(robot, rows, now)):
+                for action in propose():
+                    last_t = sent.get(action.key)
+                    if last_t is not None and now - last_t < self.config.remind_s:
+                        continue
+                    sent[action.key] = now
+                    for item_id in action.asked:
+                        sent[_asked_key(item_id)] = now
+                    emitted.append(action)
+                    self._record(action, now)
         self._save_state(sent, now)
         return emitted
 
@@ -141,7 +146,7 @@ class ActivityAgent:
 
     # --- 1. dead streak ---------------------------------------------------------------------------------------------
 
-    def _dead_streak(self, robot: str, rows: list, now: float) -> list[Action]:
+    def _dead_streak(self, robot: str, rows: list, now: float, sent: dict[str, float]) -> list[Action]:
         streak = self._trailing_dead(rows, now)
         if streak is None or streak.seconds < self.config.idle_after_s:
             return []
@@ -154,12 +159,13 @@ class ActivityAgent:
                        f"owner {item.owner}), policy {policy}. Please start it on {robot}.")
             return [Action(kind="start_next", robot=robot, to=(item.executor,), message=message, item=item.id,
                            policy=policy, key=f"start_next:{robot}:{item.id}")]
-        asked = self.queue.not_ready(robot)[:ETA_ASK_LIMIT]
+        asked = self._askable(robot, now, sent)
         if not asked:
             return []
         message = f"{dead_for} and nothing is runnable. ETA please for: {self._reasons(asked)}"
         return [Action(kind="ask_eta", robot=robot, to=_unique(item.owner for item in asked), message=message,
-                       key=f"ask_eta:{robot}:{','.join(item.id for item in asked)}")]
+                       key=f"ask_eta:{robot}:{','.join(item.id for item in asked)}",
+                       asked=tuple(item.id for item in asked))]
 
     def _trailing_dead(self, rows: list, now: float) -> Streak | None:
         if not rows or now - rows[-1].t > FRESH_S:
@@ -171,20 +177,21 @@ class ActivityAgent:
 
     # --- 2. queue low -----------------------------------------------------------------------------------------------
 
-    def _queue_low(self, robot: str, now: float) -> list[Action]:
+    def _queue_low(self, robot: str, now: float, sent: dict[str, float]) -> list[Action]:
         config = self.config
         if len(self.queue.runnable(robot)) >= config.min_runnable:
             return []
         actions = [self._fill(robot, filler, now) for filler in config.fillers if self._wants(robot, filler)]
         if len(self.queue.runnable(robot)) >= config.min_runnable:
             return actions
-        asked = self.queue.not_ready(robot)[:ETA_ASK_LIMIT]
+        asked = self._askable(robot, now, sent)
         if asked:
             runnable = len(self.queue.runnable(robot))
             message = (f"{robot}'s queue is low ({runnable} runnable, want {config.min_runnable}). "
                        f"ETA please for: {self._reasons(asked)}")
             actions.append(Action(kind="queue_low", robot=robot, to=_unique(item.owner for item in asked),
-                                  message=message, key=f"queue_low:{robot}:{','.join(item.id for item in asked)}"))
+                                  message=message, key=f"queue_low:{robot}:{','.join(item.id for item in asked)}",
+                                  asked=tuple(item.id for item in asked)))
         return actions
 
     def _wants(self, robot: str, filler: Filler) -> bool:
@@ -230,6 +237,22 @@ class ActivityAgent:
 
     # --- helpers ----------------------------------------------------------------------------------------------------
 
+    def _askable(self, robot: str, now: float, sent: dict[str, float]) -> list[Item]:
+        """The not-ready items worth an ETA ask now, in priority order, at most ETA_ASK_LIMIT.
+
+        WHY (2026-11-18): every ask is a turn of the owner's (often a Claude turn, so budget). An owner who gave an
+        ETA that has not passed has answered, and an item asked about within remind_s - by either rule - is not
+        asked about again. Before this, the demo sent ~75 asks a day to one owner."""
+        askable = []
+        for item in self.queue.not_ready(robot):
+            if item.eta_t is not None and item.eta_t > now:
+                continue
+            last_t = sent.get(_asked_key(item.id))
+            if last_t is not None and now - last_t < self.config.remind_s:
+                continue
+            askable.append(item)
+        return askable[:ETA_ASK_LIMIT]
+
     def _reasons(self, items: list[Item]) -> str:
         parts = []
         for item in items:
@@ -261,6 +284,10 @@ class ActivityAgent:
             record["delivered"] = delivered
         with (self.state_dir / "actions.jsonl").open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(record) + "\n")
+
+
+def _asked_key(item_id: str) -> str:
+    return f"asked:{item_id}"
 
 
 def _top_reason(streak: Streak) -> str:
