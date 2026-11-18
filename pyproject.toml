@@ -36,6 +36,12 @@ robot-activity = "robot_activity.cli:main"
 Homepage = "https://zacharyyamaoka.github.io/robot_activity/"
 Source = "https://github.com/zacharyyamaoka/robot_activity"
 
+[tool.uv]
+# WHY: by default uv keys its build of a local directory on pyproject.toml alone, so `uv run --isolated --with .`
+# kept serving a wheel built before 09161a7 (the demo's agent wrote 349 actions instead of 314) even with
+# --refresh-package. Rebuild whenever the source or the commit changes.
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*.py" }, { git = { commit = true } }]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/robot_activity"]
 
