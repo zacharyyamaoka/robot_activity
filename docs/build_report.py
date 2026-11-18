@@ -64,14 +64,19 @@ def run(argv: list[str], **kwargs) -> str:
 # ---- evidence, gathered now ----------------------------------------------------------------------------------------
 
 def tests() -> str:
-    return run([*CPUS, "uv", "run", "--extra", "test", "pytest", "-q"]).splitlines()[-1]
+    env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}   # the project's own venv
+    done = subprocess.run([*CPUS, "uv", "run", "--extra", "test", "pytest", "-q"], capture_output=True, text=True,
+                          cwd=ROOT, env=env)
+    return next((line for line in reversed(done.stdout.splitlines()) if " passed" in line or " failed" in line),
+                f"pytest exited {done.returncode}")
 
 
 def isolation() -> str:
     env = {key: value for key, value in os.environ.items() if key != "VIRTUAL_ENV"}
     code = ("import robot_activity, robot_activity.cli, sys; assert 'wandb' not in sys.modules; "
-            "print('import robot_activity: ok, wandb not imported, modules from', "
-            "sorted({m.split('.')[0] for m in sys.modules} & {'robot_msgs', 'numpy', 'wandb', 'matplotlib'}))")
+            "heavy = sorted({m.split('.')[0] for m in sys.modules} & {'wandb', 'matplotlib', 'rerun', 'pandas'}); "
+            "print('import robot_activity, robot_activity.cli: ok in a clean env; heavy modules imported:', "
+            "heavy or 'none')")
     return run([*CPUS, "uv", "run", "-q", "--isolated", "--no-project", "--with", ".", "python", "-c", code], env=env)
 
 
@@ -123,7 +128,7 @@ CSS = """
 :root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#161615;--ink:#f0efec;--ink-2:#c3c2b7;
 --muted:#9a998f;--line:#2c2c2a;--ring:rgba(255,255,255,.10);--code:#1d1d1c;--accent:#5598e7}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);font:15.5px/1.6 system-ui,sans-serif}
-main{max-width:1000px;margin:0 auto;padding:28px 16px 60px}a{color:var(--accent)}
+main{max-width:1000px;margin:0 auto;padding:28px 16px 60px}a{color:var(--accent);overflow-wrap:anywhere}
 h1{font-size:27px;line-height:1.25;margin:0 0 8px}h2{font-size:21px;margin:34px 0 8px;padding-top:18px;
 border-top:1px solid var(--line)}h3{font-size:16px;margin:18px 0 6px}p{margin:0 0 10px}
 .verdict{font-size:17px;color:var(--ink-2)}
@@ -206,7 +211,7 @@ stalemates and queue panels are folded away with CSS so the agent's latest actio
 <h2>The landing page, as rendered</h2>
 <div class="two"><figure><img src="{shots['desktop']}" alt="Landing page at 1280 px"><figcaption>1280 px, light (top
 1500 px of {Image.open(SHOTS / 'site-1280.png').height:,}).</figcaption></figure>
-<figure><img src="{shots['phone']}" alt="Landing page at 390 px" style="max-width:390px"><figcaption>390 px, light: no
+<figure><img src="{shots['phone']}" alt="Landing page at 390 px" style="max-width:min(390px,100%)"><figcaption>390 px, light: no
 horizontal scroll (the build fails if the page is wider than the viewport).</figcaption></figure></div>
 <figure><img src="{shots['dark']}" alt="Landing page in dark mode"><figcaption>Dark mode follows
 <code>prefers-color-scheme</code>.</figcaption></figure>
