@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "robot-activity"
+version = "0.1.0"
+description = "Robot Activity Agent: keep every robot doing useful work. Activity metrics (claimed/activity/moving), a work queue with owners and shared policies, stalemate flags, and an agent loop that keeps the queue full."
+readme = "README.md"
+authors = [{ name = "Zach Yamaoka" }]
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+keywords = ["robotics", "fleet", "utilization", "OEE", "agents", "queue", "robot_msgs"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+]
+# WHY robot-msgs + stdlib only (Zach: dependency-free runtime cores; every new package depends on robot_msgs):
+# the agent must drop into any robotics program. wandb is an extra, imported only inside robot_activity.wandb_log.
+dependencies = ["robot-msgs>=0.3.0"]
+
+[project.optional-dependencies]
+wandb = ["wandb>=0.19"]
+test = ["pytest>=8"]
+site = ["pygments>=2.17"]
+
+[project.scripts]
+robot-activity = "robot_activity.cli:main"
+
+[project.urls]
+Homepage = "https://zacharyyamaoka.github.io/robot_activity/"
+Source = "https://github.com/zacharyyamaoka/robot_activity"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/robot_activity"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "archive: reads one lab's real activity rows (local, not public; skipped when absent)",
+]
+
+[tool.ruff]
+line-length = 120
