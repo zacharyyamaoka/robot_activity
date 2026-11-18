@@ -340,6 +340,14 @@ One `tick`, per robot in `store.robots()`:
 3. **stalemate**: every `stalemate.assess` flag → `stalemate` to `(item owner, dispatcher)` with the item's policy, so
    the reader can check the code to see whether the behaviour is expected.
 
+**ETA asks spend the owner's turns, so ask each item at most once per answer** (added 2026-11-18, after the demo showed
+~75 asks/day to one owner): `ask_eta` and `queue_low` only ask about a not-ready item when
+- it has no `eta_t`, or its `eta_t` has passed (an owner who gave a future ETA has answered; ask again once it is
+  overdue), and
+- no `ask_eta` / `queue_low` action asked about it within `remind_s` (whichever rule asked, in this tick or before).
+
+`Action.asked: tuple[str, ...] = ()` lists the item ids whose owners an `ask_eta` / `queue_low` action asks.
+
 De-dup: an action with the same `key` is not emitted again within `remind_s` (state in `<state_dir>/state.json`, so a
 fresh agent object respects it). Every emitted action is appended to `<state_dir>/actions.jsonl` (with `t`) and
 handed to the notifier. The agent never calls `Queue.start`, `finish`, `block` or `set_policy`.
