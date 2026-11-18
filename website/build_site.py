@@ -63,6 +63,10 @@ QUEUE_AT_H = 12.25             # the queue screen: the ledger as it stood at 12:
 FRAME_CLIP = {"x": 80, "y": 0, "width": 1120, "height": 1128}
 PRIVATE = re.compile(r"/home/|/archive|/Users/|@gmail|\.netrc|wandb_api|api_key|gh[pousr]_[A-Za-z0-9]{20}|bam-GPU")
 SERIES = (("arm-1", "s1"), ("arm-2", "s2"), ("pendulum-1", "s3"))   # categorical slots in fixed order
+# WHY inline: a page without an icon makes every browser ask the host root for /favicon.ico (a console 404 here)
+FAVICON = ("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' "
+           "height='16' rx='3' fill='%232a78d6'/><rect x='3' y='8' width='2.5' height='5' fill='white'/><rect x='6.75' "
+           "y='5' width='2.5' height='8' fill='white'/><rect x='10.5' y='3' width='2.5' height='10' fill='white'/></svg>")
 
 # The video folds the long middle of the dashboard away so the agent's latest actions stay in frame.
 FRAME_CSS = """
@@ -794,6 +798,7 @@ def page(sections: list[str], hero_size: tuple[int, int], fleet_util: float) -> 
     return ("<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n"
             "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n"
             "<meta name=\"color-scheme\" content=\"light dark\">\n<title>Robot Activity Agent</title>\n"
+            f"<link rel=\"icon\" href=\"{FAVICON}\">\n"
             f"<meta name=\"description\" content=\"{esc(description)}\">\n"
             "<meta property=\"og:title\" content=\"Robot Activity Agent\">\n"
             f"<meta property=\"og:description\" content=\"{esc(REMIT)}\">\n"
