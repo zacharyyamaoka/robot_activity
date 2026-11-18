@@ -1,0 +1,109 @@
+{
+  "schema": "robot-activity-oracle/1",
+  "robot": "bam_fb_v2",
+  "day": "2026-11-17",
+  "tz": "America/Vancouver",
+  "input": "/archive/datasets/bam_rig/activity/bam_fb_v2/2026-11-17.jsonl",
+  "input_sha256": "14163881886654c95bc4e657f611323309cee772c92889e3c8498aa985ec2228",
+  "input_rows": 8635,
+  "in_house_schema": "bam-robot-activity/1",
+  "in_house_commit": "56ea4b5b13ef6dda6ee4896d355fc5060fdf44bc",
+  "producers": {
+    "hours.tracked_h / claimed_h / unclaimed_h / moving_h": "wandb_log.daily_summary (3 dp)",
+    "hours.still_h": "reports._reason_table total (moving False)",
+    "hours.unknown_h": "rollup.minutes unknown_s summed",
+    "hours.activity_h": "rollup.minutes job_frac x sampled_s summed (kind == 'job')",
+    "owners": "rollup.owner_breakdown (3 dp)",
+    "why_still": "reports._reason_table, parsed (hours 2 dp, share whole %)"
+  },
+  "day_rows_equal_file": true,
+  "preconditions": {
+    "every_job_row_claimed": true,
+    "claimed_iff_owner": true,
+    "still_rows_without_idle_reason": 0,
+    "fault_or_disconnected_rows": 0,
+    "rows_with_goal": 0,
+    "sample_s_values": [
+      10.0
+    ],
+    "kinds": {
+      "None": 72,
+      "hold": 6682,
+      "job": 1881
+    },
+    "states": {
+      "busy (no joint feed)": 961,
+      "claimed (no joint feed)": 500,
+      "held": 5737,
+      "held (no joint feed)": 17,
+      "held off READY": 1169,
+      "moving": 216,
+      "no host": 35
+    }
+  },
+  "hours": {
+    "tracked_h": 23.986,
+    "claimed_h": 23.786,
+    "unclaimed_h": 0.2,
+    "moving_h": 0.6,
+    "still_h": 19.3278,
+    "unknown_h": 4.0583,
+    "activity_h": 5.225
+  },
+  "owners": [
+    {
+      "owner": "Sim to Real",
+      "hours": 23.153,
+      "moving_h": 0.169,
+      "still_h": 18.925,
+      "unknown_h": 4.058
+    },
+    {
+      "owner": "PID tuna",
+      "hours": 0.633,
+      "moving_h": 0.411,
+      "still_h": 0.222,
+      "unknown_h": 0.0
+    },
+    {
+      "owner": "unclaimed",
+      "hours": 0.2,
+      "moving_h": 0.019,
+      "still_h": 0.181,
+      "unknown_h": 0.0
+    }
+  ],
+  "why_still": [
+    {
+      "reason": "blocked on code",
+      "hours": 9.54,
+      "share": 0.49
+    },
+    {
+      "reason": "claimed-still",
+      "hours": 8.17,
+      "share": 0.42
+    },
+    {
+      "reason": "queue waiting (2 runnable, not started)",
+      "hours": 0.96,
+      "share": 0.05
+    },
+    {
+      "reason": "queue waiting (1 runnable, not started)",
+      "hours": 0.47,
+      "share": 0.02
+    },
+    {
+      "reason": "unclaimed",
+      "hours": 0.15,
+      "share": 0.01
+    },
+    {
+      "reason": "job failed / relaunch pending",
+      "hours": 0.03,
+      "share": 0.0
+    }
+  ],
+  "tolerance_h": 0.01
+}
