@@ -405,8 +405,12 @@ def payload(store, queue, robot, day) -> dict
     # pure, no wandb import: {"run_id": f"{robot}-{day}", "steps": minutes(rows), "summary": asdict(hours(rows)),
     #  "tables": {"why_still": [...], "owners": [...], "streaks": [...], "handoff_gaps": [...]}}
 def fleet_payload(store, day) -> dict    # {"run_id": f"fleet-{day}", "summary": asdict(fleet(...)), ...}
-def push(store, queue, day, project, entity=None) -> dict   # logs the payloads; idempotent (resumes the run id,
-                                                             # logs only minutes not yet logged)
+def push(store, queue, day, project, entity=None) -> dict   # logs the payloads' steps and summary; idempotent (resumes
+                                                             # the run id, logs only minutes not yet logged). The tables go
+                                                             # to <root>/tables/<day>/<run id>/<name>.jsonl, never to W&B:
+                                                             # the summary names the folder (local_tables) and each
+                                                             # table's row count (table/<name>_rows). Zach, 2026-11-21:
+                                                             # W&B holds summary statistics only; media goes to Rerun.
 ```
 
 ### `demo.py`

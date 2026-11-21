@@ -2,7 +2,10 @@
 
 `payload` and `fleet_payload` are pure and never import wandb, so they can be tested and inspected anywhere. `push`
 (extra `[wandb]`) imports wandb inside the call, resumes each run by id, logs only the minutes it has not logged yet
-(step = minute of the day), and rewrites the summary and tables, so pushing twice changes nothing.
+(step = minute of the day), and rewrites the summary, so pushing twice changes nothing. The tables are written as jsonl to
+`<root>/tables/<day>/<run id>/<name>.jsonl`; the run's summary names that folder (`local_tables`) and each table's row
+count. WHY not wandb.Table (Zach, 2026-11-21: "to help limit W and B storage I think we need to just be using it for
+summary statistics; for the media-rich things we should be using rerun!").
 
 W&B is a copy of the local files, never the source of truth. Hours moving is a proxy, not an objective: every run says
 so in its notes.
@@ -10,6 +13,7 @@ so in its notes.
 
 from __future__ import annotations
 
+import json
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -101,13 +105,14 @@ def push(store: Store, queue: Queue, day: str, project: str, entity: str | None 
         if robot_payload["steps"]:
             live = _is_live(store.rows(robot, day))
             runs.append(_push_run(wandb, api, entity, project, robot_payload, day_start, local_dir, live,
-                                  job_type="robot-day", config={"robot": robot, "day": day, "tz": store.tz}))
+                                  job_type="robot-day", config={"robot": robot, "day": day, "tz": store.tz},
+                                  tables_dir=store.root / "tables" / day))
     fleet_run = fleet_payload(store, day)
     if fleet_run["steps"]:
         live = any(_is_live(store.rows(robot, day)) for robot in store.robots())
         runs.append(_push_run(wandb, api, entity, project, fleet_run, day_start, local_dir, live,
                               job_type="fleet-day", config={"robots": len(fleet_run["tables"]["robots"]), "day": day,
-                                                            "tz": store.tz}))
+                                                            "tz": store.tz}, tables_dir=store.root / "tables" / day))
     # WHY from a run's url: the W&B host is per account (wandb.ai, a dedicated or self-hosted server)
     url = runs[0]["url"].rsplit("/runs/", 1)[0] if runs and runs[0]["url"] else None
     return {"entity": entity, "project": project, "url": url, "runs": runs}
@@ -126,7 +131,7 @@ def _last_logged_minute(api: Any, path: str) -> float | None:
 
 
 def _push_run(wandb: Any, api: Any, entity: str, project: str, run_payload: dict[str, Any], day_start: float,
-              local_dir: Path, live: bool, *, job_type: str, config: dict[str, Any]) -> dict[str, Any]:
+              local_dir: Path, live: bool, *, job_type: str, config: dict[str, Any], tables_dir: Path) -> dict[str, Any]:
     run_id = run_payload["run_id"]
     last = _last_logged_minute(api, f"{entity}/{project}/{run_id}")
     steps = [step for step in run_payload["steps"] if last is None or step["minute_t"] > last]
@@ -145,24 +150,24 @@ def _push_run(wandb: Any, api: Any, entity: str, project: str, run_payload: dict
     run.summary.update(run_payload["summary"])
     if steps:
         run.summary["last_minute_t"] = steps[-1]["minute_t"]
+    # WHY jsonl beside the samples, never wandb.Table (Zach, 2026-11-21: W&B gets summary statistics)
+    folder = write_tables(tables_dir / run_id, run_payload["tables"])
+    run.summary["local_tables"] = str(folder)
     for name, rows in run_payload["tables"].items():
-        run.summary[f"table/{name}"] = _table(wandb, rows)
+        run.summary[f"table/{name}_rows"] = len(rows)
     url = run.url
     run.finish()
     return {"run_id": run_id, "url": url, "logged": len(steps)}
 
 
-def _table(wandb: Any, rows: list[dict[str, Any]]) -> Any:
-    columns = list(rows[0]) if rows else ["empty"]
-    data = [[_cell(row.get(column)) for column in columns] for row in rows]
-    return wandb.Table(columns=columns, data=data)
-
-
-def _cell(value: Any) -> Any:
-    if isinstance(value, dict):
-        return ", ".join(f"{key}: {amount / 60:.1f} min" if isinstance(amount, float) else f"{key}: {amount}"
-                         for key, amount in sorted(value.items(), key=lambda entry: -float(entry[1] or 0)))
-    return value
+def write_tables(folder: Path, tables: dict[str, list[dict[str, Any]]]) -> Path:
+    """Each table as <name>.jsonl (one row per line) in `folder`, rewritten whole through a rename (a reader never sees half)."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, rows in tables.items():
+        partial = folder / f"{name}.jsonl.partial"
+        partial.write_text("".join(json.dumps(row, default=str) + "\n" for row in rows))
+        partial.replace(folder / f"{name}.jsonl")
+    return folder
 
 
 # --- report (needs wandb-workspaces) --------------------------------------------------------------------------------
@@ -176,6 +181,13 @@ def report(project: str, entity: str | None = None, *, title: str = "Robot Activ
     """
     import wandb
     import wandb_workspaces.reports.v2 as wr
+
+    def _local(title: str, names: tuple[str, ...]) -> Any:
+        # WHY a pointer, not the tables (Zach, 2026-11-21: W&B gets summary statistics): push writes them beside the samples
+        files = ", ".join(f"`{name}.jsonl`" for name in names)
+        return wr.MarkdownPanel(markdown=f"**{title}** are kept off W&B: {files} in each run's `local_tables` folder "
+                                         "(`<root>/tables/<day>/<run id>/`) on the machine that pushed.",
+                                layout=wr.Layout(x=0, y=0, w=24, h=3))
     from wandb_workspaces import expr
 
     api = wandb.Api()
@@ -208,15 +220,11 @@ def report(project: str, entity: str | None = None, *, title: str = "Robot Activ
                        layout=wr.Layout(x=12, y=8, w=12, h=7)),
         ]),
         wr.H2(text="Why it stood still, and who held the robot"),
-        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[
-            wr.WeavePanelSummaryTable(table_name="table/why_still", layout=wr.Layout(x=0, y=0, w=12, h=10)),
-            wr.WeavePanelSummaryTable(table_name="table/owners", layout=wr.Layout(x=12, y=0, w=12, h=10)),
-        ]),
+        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[_local("Why it stood still; who held the robot",
+                                                                            ("why_still", "owners"))]),
         wr.H2(text="Streaks and hand-off gaps"),
-        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[
-            wr.WeavePanelSummaryTable(table_name="table/streaks", layout=wr.Layout(x=0, y=0, w=12, h=10)),
-            wr.WeavePanelSummaryTable(table_name="table/handoff_gaps", layout=wr.Layout(x=12, y=0, w=12, h=10)),
-        ]),
+        wr.PanelGrid(runsets=[runset("robots", "robot-day")], panels=[_local("Streaks; hand-off gaps",
+                                                                            ("streaks", "handoff_gaps"))]),
     ]
     description = "Fleet utilisation, moving share, why robots stood still and who held them, from robot_activity."
     existing = next((found for found in api.reports(f"{entity}/{project}") if found.display_name == title), None)
