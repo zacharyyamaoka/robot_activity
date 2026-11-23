@@ -33,8 +33,9 @@ site = ["pygments>=2.17"]
 robot-activity = "robot_activity.cli:main"
 
 [project.urls]
-Homepage = "https://zacharyyamaoka.github.io/robot_activity/"
-Source = "https://github.com/zacharyyamaoka/robot_activity"
+Homepage = "https://github.com/zacharyyamaoka/robot_activity"
+Repository = "https://github.com/zacharyyamaoka/robot_activity"
+Documentation = "https://zacharyyamaoka.github.io/robot_activity/"
 
 [tool.uv]
 # WHY: by default uv keys its build of a local directory on pyproject.toml alone, so `uv run --isolated --with .`

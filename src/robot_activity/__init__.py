@@ -14,7 +14,7 @@ from robot_activity.queue import BLOCKER_KINDS, DEFAULT_PRIORITY, Blocker, Item,
 from robot_activity.schema import SCHEMA, QueueSnapshot, Sample
 from robot_activity.store import Store
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
     "BLOCKER_KINDS",
