@@ -5,7 +5,7 @@ schema = "robot-sdk-declaration/1"
 role = "library"
 layer = "leaf"
 one_line = "Per-robot and fleet activity, work queue, stalemate flags"
-summary = "The Robot Activity Agent: measures whether each robot is doing useful work (claimed, active, moving), keeps a work queue moving, flags stalemates and gives every idle second a reason."
+summary = "A library that measures whether each robot is doing useful work (claimed, active, moving), keeps a work queue moving, flags stalemates and gives every idle second a reason. Its loop (`ActivityAgent.tick`) is plain code with no model in it: it prompts the owners of the work and never decides what the work is."
 use_when = "Fleet or robot utilisation, uptime dashboards, work queues."
 
 # Where to read more. github and pypi are required; the rest are what this package has.
