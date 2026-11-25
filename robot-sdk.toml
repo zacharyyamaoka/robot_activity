@@ -5,5 +5,15 @@ schema = "robot-sdk-declaration/1"
 role = "library"
 layer = "leaf"
 one_line = "Per-robot and fleet activity, work queue, stalemate flags"
+summary = "The Robot Activity Agent: measures whether each robot is doing useful work (claimed, active, moving), keeps a work queue moving, flags stalemates and gives every idle second a reason."
+use_when = "Fleet or robot utilisation, uptime dashboards, work queues."
+
+# Where to read more. github and pypi are required; the rest are what this package has.
+[links]
+github = "https://github.com/zacharyyamaoka/robot_activity"
+pypi = "https://pypi.org/project/robot-activity/"
+site = "https://zacharyyamaoka.github.io/robot_activity/"
+dashboard = "https://zacharyyamaoka.github.io/robot_activity/dashboard.html"
+changelog = "https://github.com/zacharyyamaoka/robot_activity/blob/main/CHANGELOG.md"
 
 # Observations take a JointState duck-typed (`joints: Any`, name + position), so no shared type is on a public signature.
